@@ -9,34 +9,65 @@
 แผนภาพด้านล่างแสดงการทำงานของระบบเมื่อ Client (เช่น Python Script, cURL) ส่ง Request เข้ามายัง Proxy:
 
 ```mermaid
-flowchart TD
-    Client[Client App / SDK] -->|"HTTP Request\n(Auth: Bearer Virtual-Key)"| Proxy[GO Proxy Server]
+flowchart LR
+    %% Node Definitions
+    Client([💻 Client App / SDK])
     
-    subgraph "Proxy Server Logic"
-        Proxy -->|"1. Validate Key"| DB[(Database\nMongo/SQL)]
-        DB -->|"Return Virtual Key Data"| Proxy
-        
-        Proxy -->|"2. Check Assignment"| Logic[Routing Logic]
-        Logic -->|"Lookup Config"| DB
-        
-        Proxy -->|"3. Rate Limiting"| RateLimiter[Token Bucket Limiter]
-        RateLimiter --"OK"--> Adapter[Protocol Adapter]
-        RateLimiter --"Exceeded"--> Reject["429 Too Many Requests"]
+    subgraph Core ["🛡️ LLM Proxy Core Logic"]
+        direction TB
+        Proxy[Handler: internal/proxy]
+        Auth{Auth Filter}
+        DB[(🗄️ Database\nConnections/VKeys)]
+        Limiter[🚦 Rate Limiter\nToken Bucket]
+        Manager[⚙️ Logic: internal/db]
     end
 
-    subgraph "Adapter Logic"
-        Adapter -->|"Transform Request"| Azure{Is Azure?}
-        Adapter -->|"Transform Request"| Google{Is Google?}
-        Adapter -->|"Transform Request"| Standard{Is OpenAI/AWS?}
-
-        Azure -->|"Inject api-key header\nRewrite URL path"| AzureEP[Azure OpenAI Endpoint]
-        Google -->|"Inject x-goog-api-key\nRewrite Query Params"| GoogleEP[Google AI Studio / Vertex]
-        Standard -->|"Inject Bearer Token"| StandardEP[OpenAI / AWS Bedrock Endpoint]
+    subgraph Adapters ["🔌 Protocol Adapters (Translation Layer)"]
+        direction TB
+        Adapter[Protocol Adapter]
+        AzureAdapter{Azure Parser}
+        GoogleAdapter{Google Parser}
+        StandardAdapter{OpenAI Parser}
     end
 
-    AzureEP -->|Response| Client
-    GoogleEP -->|Response| Client
-    StandardEP -->|Response| Client
+    subgraph Providers ["🌐 AI Providers (External)"]
+        AzureEP[[☁️ Azure OpenAI]]
+        GoogleEP[[🌈 Google Vertex/Studio]]
+        OpenAIEP[[🤖 OpenAI / Bedrock]]
+    end
+
+    %% Flow Connections
+    Client -->|"Bearer Virtual-Key"| Proxy
+    Proxy --> Auth
+    Auth -->|"1. Validate & Lookup"| Manager
+    Manager <--> DB
+    Auth --"Success"--> Limiter
+    Limiter --"OK"--> Adapter
+    Limiter --"Fail"--> Reject([❌ 429 Error])
+
+    Adapter --> AzureAdapter
+    Adapter --> GoogleAdapter
+    Adapter --> StandardAdapter
+
+    AzureAdapter -->|"Inject api-key\nRewrite Path"| AzureEP
+    GoogleAdapter -->|"Inject x-goog-api-key\nRewrite Query"| GoogleEP
+    StandardAdapter -->|"Inject Bearer Token"| OpenAIEP
+
+    %% Response Flow
+    AzureEP -.->|"JSON Response"| Client
+    GoogleEP -.->|"JSON Response"| Client
+    OpenAIEP -.->|"JSON Response"| Client
+
+    %% Styling
+    classDef coreNode fill:#f9f,stroke:#333,stroke-width:2px,color:#000
+    classDef providerNode fill:#bbf,stroke:#333,stroke-width:2px,color:#000
+    classDef adapterNode fill:#dfd,stroke:#333,stroke-width:1px,color:#000
+    classDef clientNode fill:#fff,stroke:#333,stroke-width:2px,color:#000
+
+    class Proxy,Auth,Limiter,Manager coreNode
+    class AzureEP,GoogleEP,OpenAIEP providerNode
+    class Adapter,AzureAdapter,GoogleAdapter,StandardAdapter adapterNode
+    class Client clientNode
 ```
 
 ### คำอธิบายส่วนประกอบหลัก (Components)
