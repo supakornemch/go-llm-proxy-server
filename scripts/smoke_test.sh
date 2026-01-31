@@ -125,9 +125,9 @@ if [[ "$PROVIDER_FILTER" == "all" || "$PROVIDER_FILTER" == "aws" ]]; then
     if [[ -n "$AWS_BEDROCK_API_KEY" && -n "$AWS_BEDROCK_ENDPOINT" ]]; then
         echo "Configuring AWS..."
         AWS_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "aws" --name "AWS-Bedrock" --endpoint "$AWS_BEDROCK_ENDPOINT" --api-key "$AWS_BEDROCK_API_KEY" | grep -oE "[a-f0-9-]{36}")
-        M_ID=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$AWS_ID" --name "claude-haiku" --remote "claude-haiku-4-5" | grep -oE "[a-f0-9-]{36}" | tail -1)
-        ./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M_ID" --alias "claude-haiku-4-5" --tps 20 > /dev/null
-        MODELS_TO_TEST+=("claude-haiku-4-5")
+        M_ID=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$AWS_ID" --name "claude-3-haiku" --remote "anthropic.claude-3-haiku-20240307-v1:0" | grep -oE "[a-f0-9-]{36}" | tail -1)
+        ./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M_ID" --alias "claude-3-haiku" --tps 20 > /dev/null
+        MODELS_TO_TEST+=("claude-3-haiku")
     else
         echo -e "${YELLOW}⚠️  Skipping AWS (Missing Environment Variables)${NC}"
     fi
