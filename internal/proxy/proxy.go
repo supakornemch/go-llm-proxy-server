@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -37,33 +38,86 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		return
 	}
 
-	limiter := p.ratelimitManager.GetLimiter(vk.Key, vk.RateLimitTPS, vk.RateLimitTokens)
-	if !limiter.AllowTPS() {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "TPS limit exceeded"})
-		return
-	}
-
-	conn, err := p.db.GetConnection(c.Request.Context(), vk.ConnectionID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get real connection"})
-		return
-	}
-
-	targetURL := strings.TrimSuffix(conn.Endpoint, "/")
-	targetURL += "/" + strings.TrimPrefix(c.Request.URL.Path, "/")
-	if c.Request.URL.RawQuery != "" {
-		targetURL += "?" + c.Request.URL.RawQuery
-	}
-
+	// Read body to identify requested model alias
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
 		return
 	}
 
+	var bodyObj map[string]interface{}
+	json.Unmarshal(body, &bodyObj)
+	modelAlias, _ := bodyObj["model"].(string)
+
+	if modelAlias == "" {
+		// Fallback for some APIs or non-chat completion if needed,
+		// but usually required for LLM proxies.
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'model' in request body"})
+		return
+	}
+
+	// Get assignment for this virtual key and model alias
+	vka, err := p.db.GetVirtualKeyAssignment(c.Request.Context(), vk.ID, modelAlias)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Virtual key not authorized for model: " + modelAlias})
+		return
+	}
+
+	// Get the actual provider model
+	pm, err := p.db.GetProviderModel(c.Request.Context(), vka.ProviderModelID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Target model not found"})
+		return
+	}
+
+	// Get credentials
+	conn, err := p.db.GetConnection(c.Request.Context(), pm.ConnectionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Provider connection not found"})
+		return
+	}
+
+	// Rate limiting (per key per model)
+	limiter := p.ratelimitManager.GetLimiter(vk.Key+":"+modelAlias, vka.RateLimitTPS, vka.RateLimitTokens)
+	if !limiter.AllowTPS() {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "TPS limit exceeded"})
+		return
+	}
+
 	if !limiter.AllowTokens(1) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Token limit exceeded"})
 		return
+	}
+
+	// Rewrite model name in body if it differs from remote model
+	if pm.RemoteModel != "" && pm.RemoteModel != modelAlias {
+		bodyObj["model"] = pm.RemoteModel
+	}
+
+	body, _ = json.Marshal(bodyObj)
+
+	targetURL := strings.TrimSuffix(conn.Endpoint, "/")
+	targetPath := strings.TrimPrefix(c.Request.URL.Path, "/")
+
+	// Provider-specific routing logic
+	if conn.Provider == "azure" {
+		// Map OpenAI-style path to Azure Foundry path if it matches
+		if targetPath == "v1/chat/completions" {
+			targetPath = "models/chat/completions"
+		}
+		// If api-version isn't in endpoint or query, add default
+		if !strings.Contains(targetURL, "api-version=") && !strings.Contains(c.Request.URL.RawQuery, "api-version=") {
+			if c.Request.URL.RawQuery == "" {
+				c.Request.URL.RawQuery = "api-version=2024-05-01-preview"
+			} else {
+				c.Request.URL.RawQuery += "&api-version=2024-05-01-preview"
+			}
+		}
+	}
+
+	targetURL = targetURL + "/" + targetPath
+	if c.Request.URL.RawQuery != "" {
+		targetURL += "?" + c.Request.URL.RawQuery
 	}
 
 	req, err := http.NewRequest(c.Request.Method, targetURL, bytes.NewReader(body))
@@ -82,11 +136,6 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 
 	if conn.Provider == "azure" {
 		req.Header.Set("api-key", conn.APIKey)
-	} else if conn.Provider == "google" {
-		req.Header.Set("x-goog-api-key", conn.APIKey)
-		q := req.URL.Query()
-		q.Set("key", conn.APIKey)
-		req.URL.RawQuery = q.Encode()
 	} else {
 		req.Header.Set("Authorization", "Bearer "+conn.APIKey)
 	}
