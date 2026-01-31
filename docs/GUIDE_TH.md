@@ -209,21 +209,201 @@ Azure มีรูปแบบ URL ที่ซับซ้อนกว่า �
       --tps 50 # ยิงได้ 50 ครั้งต่อวินาที
     ```
 
-### ตัวอย่าง Code (Python)
-เมื่อตั้งค่าเสร็จแล้ว Client สามารถใช้ OpenAI SDK เดิมๆ ได้เลย โดยเปลี่ยนแค่ `base_url` และ `api_key`:
+---
+
+## 💻 ตัวอย่าง Python Code สำหรับแต่ละ Provider
+
+เมื่อตั้งค่า Connection เสร็จแล้ว Client สามารถใช้ SDK ของแต่ละค่ายได้เลยผ่าน Proxy โดยเปลี่ยนแค่ `base_url` / `api_key` ให้ชี้มาที่ Proxy
+
+### 1. OpenAI SDK → Proxy
 
 ```python
 from openai import OpenAI
 
+# ตั้งค่า Client ให้ชี้มาที่ Proxy แทนที่ OpenAI โดยตรง
 client = OpenAI(
-    api_key="vk-front-1234",          # ใช้ Virtual Key ที่ได้จาก Proxy
-    base_url="http://localhost:8132"  # ชี้มาที่ Proxy Server
+    api_key="vk-frontend-app",         # Virtual Key จาก Proxy
+    base_url="http://localhost:8132"   # Proxy Server
 )
 
+# ใช้ได้เหมือน OpenAI API ปกติ
 response = client.chat.completions.create(
-    model="gemini-3-flash", # ใช้ชื่อ Alias ที่ตั้งไว้ตอน Assign
-    messages=[{"role": "user", "content": "Hello!"}]
+    model="gpt-4-turbo",               # Alias ที่ตั้งไว้ตอน Assign
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "สวัสดีค่ะ"}
+    ],
+    temperature=0.7
 )
 
 print(response.choices[0].message.content)
+```
+
+### 2. Azure OpenAI SDK → Proxy
+
+```python
+from openai import AzureOpenAI
+
+# ทำให้ Azure SDK ชี้มาที่ Proxy แทนที่ Azure โดยตรง
+client = AzureOpenAI(
+    api_key="vk-azure-app",            # Virtual Key จาก Proxy
+    api_version="2024-05-01-preview",  # Proxy จะจัดการให้
+    base_url="http://localhost:8132"   # Proxy Server
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",                    # Alias ที่ตั้งไว้ตอน Assign
+    messages=[
+        {"role": "user", "content": "Write a Python function"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+### 3. Google Vertex AI SDK → Proxy
+
+```python
+from google.generativeai import GenerativeModel
+import google.generativeai as genai
+
+# ตั้งค่า Vertex AI SDK ให้ชี้มาที่ Proxy
+# (สำหรับ Vertex AI ควรใช้ Proxy เป็น Bridge)
+genai.configure(api_key="vk-vertex-app")
+
+model = GenerativeModel(
+    model_name="gemini-3-flash",
+    # สามารถ override endpoint ถ้า SDK รองรับ
+)
+
+response = model.generate_content(
+    "สอนฉันเกี่ยวกับการใช้ Python async/await"
+)
+
+print(response.text)
+```
+
+**หรือใช้ HTTP Request โดยตรง (สำหรับ Vertex ที่ต้อง Fine Control):**
+
+```python
+import requests
+import json
+
+url = "http://localhost:8132/v1/publishers/google/models/gemini-3-flash:generateContent"
+
+headers = {
+    "Authorization": "Bearer vk-vertex-app",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "contents": [
+        {
+            "role": "user",
+            "parts": [
+                {"text": "What is machine learning?"}
+            ]
+        }
+    ],
+    "generationConfig": {
+        "temperature": 0.8,
+        "maxOutputTokens": 1024
+    },
+    "thinkingConfig": {
+        "type": "EXTENDED_THINKING",
+        "budgetTokens": 5000
+    }
+}
+
+response = requests.post(url, headers=headers, json=payload)
+result = response.json()
+
+print(result["candidates"][0]["content"]["parts"][0]["text"])
+```
+
+### 4. AWS Bedrock SDK → Proxy
+
+```python
+import boto3
+from botocore.config import Config
+
+# สร้าง Bedrock client ผ่าน Proxy
+bedrock_client = boto3.client(
+    'bedrock-runtime',
+    region_name='us-east-1',
+    config=Config(
+        # ทำให้ boto3 ชี้มาที่ Proxy แทน AWS
+        retries={'max_attempts': 2}
+    )
+)
+
+# ส่ง Request ไปยัง Proxy ด้วย Virtual Key
+response = bedrock_client.invoke_model(
+    modelId='vk-bedrock-app',  # Virtual Key สามารถแทน modelId ได้
+    body=json.dumps({
+        "prompt": "Explain quantum computing",
+        "temperature": 0.7,
+        "max_tokens": 512
+    })
+)
+
+output = json.loads(response['body'].read())
+print(output['completion'])
+```
+
+### 5. Raw HTTP Request (Universal)
+
+หากไม่อยากใช้ SDK สามารถส่ง HTTP Request ตรงได้:
+
+```python
+import requests
+import json
+
+# สำหรับ OpenAI-compatible endpoints
+url = "http://localhost:8132/v1/chat/completions"
+
+headers = {
+    "Authorization": "Bearer vk-my-app",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "model": "gpt-4-turbo",
+    "messages": [
+        {"role": "user", "content": "Hello, how are you?"}
+    ],
+    "temperature": 0.7,
+    "max_tokens": 256
+}
+
+response = requests.post(url, headers=headers, json=payload)
+
+if response.status_code == 200:
+    data = response.json()
+    print(f"Response: {data['choices'][0]['message']['content']}")
+else:
+    print(f"Error {response.status_code}: {response.text}")
+```
+
+---
+
+## 📦 Installation คำสั่ง
+
+ติดตั้ง SDK ที่จำเป็นสำหรับโปรเจกต์ของคุณ:
+
+```bash
+# OpenAI SDK
+pip install openai
+
+# Azure OpenAI SDK
+pip install azure-openai
+
+# Google Generative AI SDK
+pip install google-generativeai
+
+# AWS Boto3
+pip install boto3
+
+# HTTP Requests
+pip install requests
 ```
