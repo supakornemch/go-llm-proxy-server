@@ -4,7 +4,8 @@ A lightweight, reliable LLM proxy server written in Go. Manage multiple LLM prov
 
 ## Features
 
-- **Multi-Provider Support**: Connect to OpenAI, Azure OpenAI, and more.
+- **Multi-Provider Support**: Connect to OpenAI, Azure OpenAI, and Google Gemini (Native & AI Platform).
+- **Smart Protocol Adaptation**: Automatically handles authentication schemes (Bearer, API Key headers, or Query parameters) based on the provider.
 - **Virtual Keys**: Issue specific keys to clients/projects without exposing master API keys.
 - **Rate Limiting**: Control usage with Requests Per Second (TPS) and Token limits.
 - **Unified Interface**: Supports SQL (SQLite, Postgres, MSSQL) and NoSQL (MongoDB).
