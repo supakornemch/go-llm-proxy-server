@@ -139,7 +139,7 @@ run_example() {
     echo ""
     
     # Inject Virtual Key and Model Alias into the example
-    python3 -c "
+    ./.venv/bin/python3 -c "
 import sys
 import os
 

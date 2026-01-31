@@ -242,7 +242,12 @@ class ProxySetup:
         
         # Execute
         try:
-            exec(code, {'__name__': '__main__'})
+            import subprocess
+            result = subprocess.run(
+                ['./.venv/bin/python3', '-c', code],
+                cwd='.',
+                capture_output=False
+            )
         except Exception as e:
             self.log_error(f"Example execution failed: {e}")
         
