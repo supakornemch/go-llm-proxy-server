@@ -1,0 +1,38 @@
+services:
+  llm-proxy:
+    build: .
+    ports:
+      - "${PORT:-8132}:${PORT:-8132}"
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Bangkok
+    volumes:
+      - ./llm_proxy.db:/app/llm_proxy.db
+
+  # Optional: PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: gorm
+      POSTGRES_PASSWORD: gorm
+      POSTGRES_DB: gorm
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Optional: MongoDB
+  mongo:
+    image: mongo:6-jammy
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: examplepassword
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  postgres_data:
+  mongo_data:
