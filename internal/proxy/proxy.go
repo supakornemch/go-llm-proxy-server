@@ -103,38 +103,76 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		return
 	}
 
-	// Rewrite model name in body if it differs from remote model
+	// Prepare target path and check for model replacement in URL
+	targetURLStr := strings.TrimSuffix(conn.Endpoint, "/")
+	targetPath := strings.TrimPrefix(c.Request.URL.Path, "/")
+
 	if pm.RemoteModel != "" && pm.RemoteModel != modelAlias {
-		bodyObj["model"] = pm.RemoteModel
+		// 1. Rewrite in body ONLY if it existed (OpenAI style)
+		if _, exists := bodyObj["model"]; exists {
+			bodyObj["model"] = pm.RemoteModel
+		}
+
+		// 2. Rewrite in URL path (Native Gemini/Vertex style)
+		targetPath = strings.Replace(targetPath, modelAlias, pm.RemoteModel, 1)
 	}
 
 	body, _ = json.Marshal(bodyObj)
 
-	targetURL := strings.TrimSuffix(conn.Endpoint, "/")
-	targetPath := strings.TrimPrefix(c.Request.URL.Path, "/")
+	// Build raw query. We merge existing endpoint query with request query.
+	rawQuery := c.Request.URL.RawQuery
 
 	// Provider-specific routing logic
-	if conn.Provider == "azure" {
+	switch conn.Provider {
+	case "azure":
 		// Map OpenAI-style path to Azure Foundry path if it matches
 		if targetPath == "v1/chat/completions" {
 			targetPath = "models/chat/completions"
 		}
 		// If api-version isn't in endpoint or query, add default
-		if !strings.Contains(targetURL, "api-version=") && !strings.Contains(c.Request.URL.RawQuery, "api-version=") {
-			if c.Request.URL.RawQuery == "" {
-				c.Request.URL.RawQuery = "api-version=2024-05-01-preview"
+		if !strings.Contains(targetURLStr, "api-version=") && !strings.Contains(rawQuery, "api-version=") {
+			if rawQuery == "" {
+				rawQuery = "api-version=2024-05-01-preview"
 			} else {
-				c.Request.URL.RawQuery += "&api-version=2024-05-01-preview"
+				rawQuery += "&api-version=2024-05-01-preview"
 			}
+		}
+	case "google":
+		// Handle path mapping:
+		// Convert Vertex-style path to AI Studio-style if the endpoint is AI Studio.
+		isVertex := strings.Contains(targetURLStr, "aiplatform.googleapis.com")
+		if !isVertex {
+			targetPath = strings.Replace(targetPath, "publishers/google/", "", 1)
+		}
+
+		// Google AI Studio OpenAI-compatible endpoint doesn't want the /v1/ prefix
+		if strings.HasSuffix(targetURLStr, "/openai") && strings.HasPrefix(targetPath, "v1/") {
+			targetPath = strings.TrimPrefix(targetPath, "v1/")
+		}
+
+		// Strip client's 'key' param and inject our own
+		params := strings.Split(rawQuery, "&")
+		var newParams []string
+		for _, p := range params {
+			if !strings.HasPrefix(p, "key=") && p != "" {
+				newParams = append(newParams, p)
+			}
+		}
+		newParams = append(newParams, "key="+conn.APIKey)
+		rawQuery = strings.Join(newParams, "&")
+	}
+
+	// Final URL Construction
+	finalURL := targetURLStr + "/" + targetPath
+	if rawQuery != "" {
+		if strings.Contains(finalURL, "?") {
+			finalURL += "&" + rawQuery
+		} else {
+			finalURL += "?" + rawQuery
 		}
 	}
 
-	targetURL = targetURL + "/" + targetPath
-	if c.Request.URL.RawQuery != "" {
-		targetURL += "?" + c.Request.URL.RawQuery
-	}
-
-	req, err := http.NewRequest(c.Request.Method, targetURL, bytes.NewReader(body))
+	req, err := http.NewRequest(c.Request.Method, finalURL, bytes.NewReader(body))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
 		return
@@ -148,9 +186,18 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		req.Header[k] = v
 	}
 
-	if conn.Provider == "azure" {
+	switch conn.Provider {
+	case "azure":
 		req.Header.Set("api-key", conn.APIKey)
-	} else {
+		req.Header.Set("Authorization", "Bearer "+conn.APIKey)
+	case "google":
+		req.Header.Set("x-goog-api-key", conn.APIKey)
+		// Only use Bearer auth if it's an OAuth token (starts with ya29).
+		// API Keys (like Vertex API keys starting with AQ.) should not use Bearer.
+		if strings.HasPrefix(conn.APIKey, "ya29.") {
+			req.Header.Set("Authorization", "Bearer "+conn.APIKey)
+		}
+	default:
 		req.Header.Set("Authorization", "Bearer "+conn.APIKey)
 	}
 
