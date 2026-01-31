@@ -106,18 +106,21 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 	// Prepare target path and check for model replacement in URL
 	targetURLStr := strings.TrimSuffix(conn.Endpoint, "/")
 	targetPath := strings.TrimPrefix(c.Request.URL.Path, "/")
+	originalBody := body // Keep original for pass-through
 
 	if pm.RemoteModel != "" && pm.RemoteModel != modelAlias {
 		// 1. Rewrite in body ONLY if it existed (OpenAI style)
 		if _, exists := bodyObj["model"]; exists {
 			bodyObj["model"] = pm.RemoteModel
+			body, _ = json.Marshal(bodyObj)
 		}
 
 		// 2. Rewrite in URL path (Native Gemini/Vertex style)
 		targetPath = strings.Replace(targetPath, modelAlias, pm.RemoteModel, 1)
+	} else {
+		// If no model rewrite needed, use original raw body to avoid re-marshaling side effects
+		body = originalBody
 	}
-
-	body, _ = json.Marshal(bodyObj)
 
 	// Build raw query. We merge existing endpoint query with request query.
 	rawQuery := c.Request.URL.RawQuery
