@@ -5,6 +5,7 @@
 *.so
 *.dylib
 llm-proxy
+scripts/smoke_test.sh
 *.log
 
 # Test binary, built with `go test -c`, not used by `go test`
