@@ -10,28 +10,28 @@
 
 ```mermaid
 flowchart TD
-    Client[Client App / SDK] -->|HTTP Request\n(Auth: Bearer Virtual-Key)| Proxy[GO Proxy Server]
+    Client[Client App / SDK] -->|"HTTP Request\n(Auth: Bearer Virtual-Key)"| Proxy[GO Proxy Server]
     
-    subgraph Proxy Server Logic
-        Proxy -->|1. Validate Key| DB[(Database\nMongo/SQL)]
-        DB -->|Return Virtual Key Data| Proxy
+    subgraph "Proxy Server Logic"
+        Proxy -->|"1. Validate Key"| DB[(Database\nMongo/SQL)]
+        DB -->|"Return Virtual Key Data"| Proxy
         
-        Proxy -->|2. Check Assignment| Logic[Routing Logic]
-        Logic -->|Lookup Config| DB
+        Proxy -->|"2. Check Assignment"| Logic[Routing Logic]
+        Logic -->|"Lookup Config"| DB
         
-        Proxy -->|3. Rate Limiting| RateLimiter[Token Bucket Limiter]
-        RateLimiter --OK--> Adapter[Protocol Adapter]
-        RateLimiter --Exceeded--> Reject[429 Too Many Requests]
+        Proxy -->|"3. Rate Limiting"| RateLimiter[Token Bucket Limiter]
+        RateLimiter --"OK"--> Adapter[Protocol Adapter]
+        RateLimiter --"Exceeded"--> Reject["429 Too Many Requests"]
     end
 
-    subgraph Adapter Logic
-        Adapter -->|Transform Request| Azure{Is Azure?}
-        Adapter -->|Transform Request| Google{Is Google?}
-        Adapter -->|Transform Request| Standard{Is OpenAI/AWS?}
+    subgraph "Adapter Logic"
+        Adapter -->|"Transform Request"| Azure{Is Azure?}
+        Adapter -->|"Transform Request"| Google{Is Google?}
+        Adapter -->|"Transform Request"| Standard{Is OpenAI/AWS?}
 
-        Azure -->|Inject api-key header\nRewrite URL path| AzureEP[Azure OpenAI Endpoint]
-        Google -->|Inject x-goog-api-key\nRewrite Query Params| GoogleEP[Google AI Studio / Vertex]
-        Standard -->|Inject Bearer Token| StandardEP[OpenAI / AWS Bedrock Endpoint]
+        Azure -->|"Inject api-key header\nRewrite URL path"| AzureEP[Azure OpenAI Endpoint]
+        Google -->|"Inject x-goog-api-key\nRewrite Query Params"| GoogleEP[Google AI Studio / Vertex]
+        Standard -->|"Inject Bearer Token"| StandardEP[OpenAI / AWS Bedrock Endpoint]
     end
 
     AzureEP -->|Response| Client
