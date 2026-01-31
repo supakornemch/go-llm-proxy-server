@@ -9,65 +9,54 @@
 แผนภาพด้านล่างแสดงการทำงานของระบบเมื่อ Client (เช่น Python Script, cURL) ส่ง Request เข้ามายัง Proxy:
 
 ```mermaid
-flowchart LR
-    %% Node Definitions
-    Client([💻 Client App / SDK])
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#1f77b4', 'primaryBorderColor':'#004a9e', 'lineColor':'#666', 'secondColor':'#2ca02c', 'tertiaryColor':'#ff7f0e'}, 'flowchart': {'useMaxWidth': true, 'padding': '20', 'fontSize': '14'}}}%%
+flowchart TD
+    Client["👤 Client App / SDK<br/>(Python, Node.js, cURL)"]
     
-    subgraph Core ["🛡️ LLM Proxy Core Logic"]
-        direction TB
-        Proxy[Handler: internal/proxy]
-        Auth{Auth Filter}
-        DB[(🗄️ Database\nConnections/VKeys)]
-        Limiter[🚦 Rate Limiter\nToken Bucket]
-        Manager[⚙️ Logic: internal/db]
+    Client -->|"📤 HTTP Request<br/>(Auth: Bearer Virtual-Key)"| Proxy["🔐 GO Proxy Server<br/><br/>Port 8132"]
+    
+    subgraph ProxyLogic["<b>⚙️ Proxy Server Logic</b>"]
+        Proxy -->|"1️⃣ Validate Key"| DB[("💾 Database<br/>MongoDB/SQL<br/><br/>Stores Keys,<br/>Assignments")]
+        DB -->|"✅ Return Virtual Key Data"| Proxy
+        
+        Proxy -->|"2️⃣ Check Assignment"| Logic["🔀 Routing Logic<br/><br/>Maps Virtual Model<br/>→ Real Model"]
+        Logic -->|"📋 Lookup Config"| DB
+        
+        Proxy -->|"3️⃣ Rate Limiting"| RateLimiter["⏱️ Token Bucket<br/>Limiter<br/><br/>TPS Control"]
+        RateLimiter -->|"✅ OK"| Adapter["🔄 Protocol Adapter<br/><br/>Transform to Provider<br/>Format"]
+        RateLimiter -->|"⛔ Exceeded"| Reject["⚠️ 429<br/>Too Many<br/>Requests"]
     end
 
-    subgraph Adapters ["🔌 Protocol Adapters (Translation Layer)"]
-        direction TB
-        Adapter[Protocol Adapter]
-        AzureAdapter{Azure Parser}
-        GoogleAdapter{Google Parser}
-        StandardAdapter{OpenAI Parser}
+    subgraph AdapterLogic["<b>🌐 Adapter Logic</b>"]
+        Adapter -->|"Detect Provider"| Azure{"☁️ Azure<br/>OpenAI?"}
+        Adapter -->|"Detect Provider"| Google{"🔍 Google<br/>Vertex/Studio?"}
+        Adapter -->|"Detect Provider"| Standard{"📌 OpenAI/<br/>AWS?"}
+
+        Azure -->|"✏️ Inject: api-key<br/>Rewrite: URL + version"| AzureEP["☁️ Azure OpenAI<br/>Endpoint<br/><br/>https://xxx.openai.azure.com"]
+        Google -->|"✏️ Inject: x-goog-api-key<br/>Strip: Bearer (if API key)"| GoogleEP["🔍 Google Vertex/Studio<br/>Endpoint<br/><br/>aiplatform.googleapis.com"]
+        Standard -->|"✏️ Inject: Bearer Token"| StandardEP["📌 OpenAI / AWS Bedrock<br/>Endpoint<br/><br/>api.openai.com"]
     end
 
-    subgraph Providers ["🌐 AI Providers (External)"]
-        AzureEP[[☁️ Azure OpenAI]]
-        GoogleEP[[🌈 Google Vertex/Studio]]
-        OpenAIEP[[🤖 OpenAI / Bedrock]]
-    end
-
-    %% Flow Connections
-    Client -->|"Bearer Virtual-Key"| Proxy
-    Proxy --> Auth
-    Auth -->|"1. Validate & Lookup"| Manager
-    Manager <--> DB
-    Auth --"Success"--> Limiter
-    Limiter --"OK"--> Adapter
-    Limiter --"Fail"--> Reject([❌ 429 Error])
-
-    Adapter --> AzureAdapter
-    Adapter --> GoogleAdapter
-    Adapter --> StandardAdapter
-
-    AzureAdapter -->|"Inject api-key\nRewrite Path"| AzureEP
-    GoogleAdapter -->|"Inject x-goog-api-key\nRewrite Query"| GoogleEP
-    StandardAdapter -->|"Inject Bearer Token"| OpenAIEP
-
-    %% Response Flow
-    AzureEP -.->|"JSON Response"| Client
-    GoogleEP -.->|"JSON Response"| Client
-    OpenAIEP -.->|"JSON Response"| Client
-
-    %% Styling
-    classDef coreNode fill:#f9f,stroke:#333,stroke-width:2px,color:#000
-    classDef providerNode fill:#bbf,stroke:#333,stroke-width:2px,color:#000
-    classDef adapterNode fill:#dfd,stroke:#333,stroke-width:1px,color:#000
-    classDef clientNode fill:#fff,stroke:#333,stroke-width:2px,color:#000
-
-    class Proxy,Auth,Limiter,Manager coreNode
-    class AzureEP,GoogleEP,OpenAIEP providerNode
-    class Adapter,AzureAdapter,GoogleAdapter,StandardAdapter adapterNode
-    class Client clientNode
+    AzureEP -->|"📥 Response"| Client
+    GoogleEP -->|"📥 Response"| Client
+    StandardEP -->|"📥 Response"| Client
+    Reject -->|"❌ Error"| Client
+    
+    style Client fill:#e1f5ff,stroke:#01579b,stroke-width:2px,color:#000
+    style Proxy fill:#fff3e0,stroke:#e65100,stroke-width:3px,color:#000,font-weight:bold
+    style DB fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
+    style Logic fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000
+    style RateLimiter fill:#fce4ec,stroke:#880e4f,stroke-width:2px,color:#000
+    style Adapter fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    style Reject fill:#ffebee,stroke:#b71c1c,stroke-width:2px,color:#000
+    style Azure fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000
+    style Google fill:#f1f8e9,stroke:#558b2f,stroke-width:2px,color:#000
+    style Standard fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#000
+    style AzureEP fill:#bbdefb,stroke:#0d47a1,stroke-width:2px,color:#000
+    style GoogleEP fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style StandardEP fill:#d1c4e9,stroke:#3949ab,stroke-width:2px,color:#000
+    style ProxyLogic fill:#fff8e1,stroke:#f57c00,stroke-width:2px
+    style AdapterLogic fill:#f1f8e9,stroke:#689f38,stroke-width:2px
 ```
 
 ### คำอธิบายส่วนประกอบหลัก (Components)
