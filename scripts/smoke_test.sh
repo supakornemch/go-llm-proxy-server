@@ -71,10 +71,10 @@ echo -e "${YELLOW}🌱 Seeding Provider Configuration...${NC}"
 # 4.1 Create Connections
 # Note: Google Gemini now uses standard OpenAI endpoint structure 
 # Endpoint: https://generativelanguage.googleapis.com/v1beta/openai
-OPENAI_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "openai" --name "OpenAI-Main" --endpoint "https://api.openai.com" --api-key "${PROD_OPENAI_KEY:-sk-dummy-openai-key-for-testing}" | grep -oE "[a-f0-9-]{36}")
-AZURE_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "azure" --name "Azure-Foundry" --endpoint "https://foundry-myworkshop-sbx.services.ai.azure.com" --api-key "${PROD_AZURE_KEY:-dummy-azure-key}" | grep -oE "[a-f0-9-]{36}")
-GOOGLE_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "google" --name "Google-Gemini" --endpoint "https://generativelanguage.googleapis.com/v1beta/openai" --api-key "${PROD_GOOGLE_KEY:-dummy-google-key}" | grep -oE "[a-f0-9-]{36}")
-AWS_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "aws" --name "AWS-Bedrock" --endpoint "https://bedrock-runtime.ap-southeast-1.amazonaws.com" --api-key "${PROD_AWS_KEY:-dummy-aws-key}" | grep -oE "[a-f0-9-]{36}")
+OPENAI_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "openai" --name "OpenAI-Main" --endpoint "${OPENAI_API_ENDPOINT:-https://api.openai.com}" --api-key "${OPENAI_API_KEY:-sk-dummy-openai-key-for-testing}" | grep -oE "[a-f0-9-]{36}")
+AZURE_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "azure" --name "Azure-Foundry" --endpoint "${AZURE_FOUNDRY_URL:-https://foundry-myworkshop-sbx.services.ai.azure.com}" --api-key "${AZURE_FOUNDRY_API_KEY:-dummy-azure-key}" | grep -oE "[a-f0-9-]{36}")
+GOOGLE_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "google" --name "Google-Gemini" --endpoint "${GOOGLE_GEMINI_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta/openai}" --api-key "${GOOGLE_VERTEX_API_KEY:-dummy-google-key}" | grep -oE "[a-f0-9-]{36}")
+AWS_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "aws" --name "AWS-Bedrock" --endpoint "${AWS_BEDROCK_ENDPOINT:-https://bedrock-runtime.ap-southeast-1.amazonaws.com}" --api-key "${AWS_BEDROCK_API_KEY:-dummy-aws-key}" | grep -oE "[a-f0-9-]{36}")
 
 # 4.2 Create Virtual Key
 VK_ID=$(./llm-proxy vkey add --db-type $DB_TYPE --dsn "$DB_DSN" --name "Test-User-Key" --key "$VKEY" | grep -oE "[a-f0-9-]{36}" | tail -1)
