@@ -51,12 +51,16 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 
 	// Fallback: Try to extract model from URL if not in body (common in Gemini SDKs)
 	// Example path: /v1/models/gemini-1.5-flash:generateContent
+	// Example Vertex path: /v1/projects/.../locations/.../publishers/google/models/gemini-1.5-flash:streamGenerateContent
 	if modelAlias == "" {
 		pathParts := strings.Split(c.Request.URL.Path, "/")
 		for i, part := range pathParts {
 			if part == "models" && i+1 < len(pathParts) {
 				modelAlias = strings.Split(pathParts[i+1], ":")[0]
-				break
+				// Check if it's the specific part we want (avoiding mid-path matching if possible)
+				if modelAlias != "" {
+					break
+				}
 			}
 		}
 	}
