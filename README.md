@@ -43,7 +43,33 @@ llm = ChatOpenAI(
 print(llm.invoke("Hello from Gemini via Proxy!").content)
 ```
 
-### 2. cURL
+### 2. Google GenAI SDK (Native & Thinking Config)
+
+The proxy also supports the native Google GenAI SDK and advanced features like **Thinking Config** (Gemini 2.0).
+
+```python
+from google import genai
+from google.genai import types
+
+client = genai.Client(
+    api_key="sk-proxy-default-key", # Your Virtual Key
+    request_options={"base_url": "http://localhost:8132"}
+)
+
+# You can use advanced Gemini features through the proxy passthrough
+config = types.GenerateContentConfig(
+    thinking_config=types.ThinkingConfig(thinking_level="HIGH"),
+)
+
+response = client.models.generate_content(
+    model="gemini-2.0-flash-thinking-preview", 
+    contents="Explain quantum computing.",
+    config=config
+)
+print(response.text)
+```
+
+### 3. cURL
 
 ```bash
 curl -X POST http://localhost:8132/v1/chat/completions \

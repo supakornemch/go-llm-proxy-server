@@ -49,10 +49,20 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 	json.Unmarshal(body, &bodyObj)
 	modelAlias, _ := bodyObj["model"].(string)
 
+	// Fallback: Try to extract model from URL if not in body (common in Gemini SDKs)
+	// Example path: /v1/models/gemini-1.5-flash:generateContent
 	if modelAlias == "" {
-		// Fallback for some APIs or non-chat completion if needed,
-		// but usually required for LLM proxies.
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'model' in request body"})
+		pathParts := strings.Split(c.Request.URL.Path, "/")
+		for i, part := range pathParts {
+			if part == "models" && i+1 < len(pathParts) {
+				modelAlias = strings.Split(pathParts[i+1], ":")[0]
+				break
+			}
+		}
+	}
+
+	if modelAlias == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'model' in request body or URL path"})
 		return
 	}
 
