@@ -68,33 +68,53 @@ fi
 # ----------------- 4. Auto-Seeding via CLI -----------------
 echo -e "${YELLOW}🌱 Seeding Provider Configuration...${NC}"
 
-# 4.1 Create Connections
-# Note: Google Gemini now uses standard OpenAI endpoint structure 
-# Endpoint: https://generativelanguage.googleapis.com/v1beta/openai
-OPENAI_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "openai" --name "OpenAI-Main" --endpoint "${OPENAI_API_ENDPOINT:-https://api.openai.com}" --api-key "${OPENAI_API_KEY:-sk-dummy-openai-key-for-testing}" | grep -oE "[a-f0-9-]{36}")
-AZURE_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "azure" --name "Azure-Foundry" --endpoint "${AZURE_FOUNDRY_URL:-https://foundry-myworkshop-sbx.services.ai.azure.com}" --api-key "${AZURE_FOUNDRY_API_KEY:-dummy-azure-key}" | grep -oE "[a-f0-9-]{36}")
-GOOGLE_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "google" --name "Google-Gemini" --endpoint "${GOOGLE_GEMINI_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta/openai}" --api-key "${GOOGLE_VERTEX_API_KEY:-dummy-google-key}" | grep -oE "[a-f0-9-]{36}")
-AWS_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "aws" --name "AWS-Bedrock" --endpoint "${AWS_BEDROCK_ENDPOINT:-https://bedrock-runtime.ap-southeast-1.amazonaws.com}" --api-key "${AWS_BEDROCK_API_KEY:-dummy-aws-key}" | grep -oE "[a-f0-9-]{36}")
+# 4.1 Create Connections & Models (Conditional)
+# Track which models were successfully assigned
+MODELS_TO_TEST=()
 
-# 4.2 Create Virtual Key
-VK_ID=$(./llm-proxy vkey add --db-type $DB_TYPE --dsn "$DB_DSN" --name "Test-User-Key" --key "$VKEY" | grep -oE "[a-f0-9-]{36}" | tail -1)
+# 4.1.1 OpenAI
+if [[ -n "$OPENAI_API_KEY" && -n "$OPENAI_API_ENDPOINT" ]]; then
+    echo "Configuring OpenAI..."
+    OPENAI_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "openai" --name "OpenAI-Main" --endpoint "$OPENAI_API_ENDPOINT" --api-key "$OPENAI_API_KEY" | grep -oE "[a-f0-9-]{36}")
+    M_ID=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$OPENAI_ID" --name "gpt-4.1" --remote "gpt-4.1" | grep -oE "[a-f0-9-]{36}" | tail -1)
+    ./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M_ID" --alias "gpt-4.1" --tps 20 > /dev/null
+    MODELS_TO_TEST+=("gpt-4.1")
+else
+    echo -e "${YELLOW}⚠️  Skipping OpenAI (Missing Environment Variables)${NC}"
+fi
 
-# 4.3 Assign Models (Map Alias -> Remote Model)
-# OpenAI: Standard mapping
-M1=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$OPENAI_ID" --name "gpt-4.1" --remote "gpt-4.1" | grep -oE "[a-f0-9-]{36}" | tail -1)
-./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M1" --alias "gpt-4.1" --tps 20 > /dev/null
+# 4.1.2 Azure
+if [[ -n "$AZURE_FOUNDRY_API_KEY" && -n "$AZURE_FOUNDRY_URL" ]]; then
+    echo "Configuring Azure..."
+    AZURE_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "azure" --name "Azure-Foundry" --endpoint "$AZURE_FOUNDRY_URL" --api-key "$AZURE_FOUNDRY_API_KEY" | grep -oE "[a-f0-9-]{36}")
+    M_ID=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$AZURE_ID" --name "azure-gpt" --remote "gpt-oss-120b" | grep -oE "[a-f0-9-]{36}" | tail -1)
+    ./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M_ID" --alias "gpt-oss-120b" --tps 20 > /dev/null
+    MODELS_TO_TEST+=("gpt-oss-120b")
+else
+    echo -e "${YELLOW}⚠️  Skipping Azure (Missing Environment Variables)${NC}"
+fi
 
-# Azure: Map local 'gpt-oss' to remote 'gpt-oss-120b'
-M2=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$AZURE_ID" --name "azure-gpt" --remote "gpt-oss-120b" | grep -oE "[a-f0-9-]{36}" | tail -1)
-./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M2" --alias "gpt-oss-120b" --tps 20 > /dev/null
+# 4.1.3 Google
+if [[ -n "$GOOGLE_VERTEX_API_KEY" && -n "$GOOGLE_GEMINI_ENDPOINT" ]]; then
+    echo "Configuring Google..."
+    GOOGLE_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "google" --name "Google-Gemini" --endpoint "$GOOGLE_GEMINI_ENDPOINT" --api-key "$GOOGLE_VERTEX_API_KEY" | grep -oE "[a-f0-9-]{36}")
+    M_ID=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$GOOGLE_ID" --name "gemini-flash" --remote "gemini-1.5-flash" | grep -oE "[a-f0-9-]{36}" | tail -1)
+    ./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M_ID" --alias "gemini-1.5-flash" --tps 20 > /dev/null
+    MODELS_TO_TEST+=("gemini-1.5-flash")
+else
+    echo -e "${YELLOW}⚠️  Skipping Google (Missing Environment Variables)${NC}"
+fi
 
-# Google: Gemini Flash
-M3=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$GOOGLE_ID" --name "gemini-flash" --remote "gemini-1.5-flash" | grep -oE "[a-f0-9-]{36}" | tail -1)
-./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M3" --alias "gemini-1.5-flash" --tps 20 > /dev/null
-
-# AWS: Claude Haiku
-M4=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$AWS_ID" --name "claude-haiku" --remote "claude-haiku-4-5" | grep -oE "[a-f0-9-]{36}" | tail -1)
-./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M4" --alias "claude-haiku-4-5" --tps 20 > /dev/null
+# 4.1.4 AWS
+if [[ -n "$AWS_BEDROCK_API_KEY" && -n "$AWS_BEDROCK_ENDPOINT" ]]; then
+    echo "Configuring AWS..."
+    AWS_ID=$(./llm-proxy connection add --db-type $DB_TYPE --dsn "$DB_DSN" --provider "aws" --name "AWS-Bedrock" --endpoint "$AWS_BEDROCK_ENDPOINT" --api-key "$AWS_BEDROCK_API_KEY" | grep -oE "[a-f0-9-]{36}")
+    M_ID=$(./llm-proxy model add --db-type $DB_TYPE --dsn "$DB_DSN" --conn-id "$AWS_ID" --name "claude-haiku" --remote "claude-haiku-4-5" | grep -oE "[a-f0-9-]{36}" | tail -1)
+    ./llm-proxy assign --db-type $DB_TYPE --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M_ID" --alias "claude-haiku-4-5" --tps 20 > /dev/null
+    MODELS_TO_TEST+=("claude-haiku-4-5")
+else
+    echo -e "${YELLOW}⚠️  Skipping AWS (Missing Environment Variables)${NC}"
+fi
 
 echo -e "${GREEN}✅ Seeding Completed.${NC}"
 
@@ -110,8 +130,6 @@ PAYLOAD='{
 
 run_test() {
     local ALIAS=$1
-    local EXPECTED_NAME=$2
-    
     echo -n "Testing [$ALIAS]... "
     
     # Inject model name into payload
@@ -127,8 +145,6 @@ run_test() {
     if [[ "$HTTP_CODE" == "200" ]]; then
         echo -e "${GREEN}PASS (200 OK)${NC}"
     elif [[ "$HTTP_CODE" == "401" ]]; then 
-        # 401 is acceptable for this smoke test as we use dummy/expired keys for some providers, 
-        # but it proves the Proxy routed the request to the correct upstream.
         echo -e "${GREEN}PASS (401 from Provider)${NC}"
     else
         echo -e "${RED}FAIL ($HTTP_CODE)${NC}"
@@ -138,10 +154,14 @@ run_test() {
 }
 
 echo "---------------------------------------------------"
-run_test "gpt-4.1" "OpenAI"
-run_test "gpt-oss-120b" "Azure"
-run_test "gemini-1.5-flash" "Google"
-run_test "claude-haiku-4-5" "AWS"
+if [ ${#MODELS_TO_TEST[@]} -eq 0 ]; then
+    echo -e "${RED}❌ No models were configured. Testing skipped.${NC}"
+    TEST_FAILED=1
+else
+    for MODEL in "${MODELS_TO_TEST[@]}"; do
+        run_test "$MODEL"
+    done
+fi
 echo "---------------------------------------------------"
 
 # ----------------- 6. Cleanup & Exit -----------------
