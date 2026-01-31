@@ -56,7 +56,7 @@ create_connection() {
     
     if [ -z "$API_KEY" ]; then
         log_warning "Skipping $NAME (API Key not set)"
-        return ""
+        return
     fi
     
     log_step "Creating connection: $NAME"
@@ -70,7 +70,7 @@ create_connection() {
     
     if [ -z "$CONN_ID" ]; then
         log_error "Failed to create connection $NAME"
-        return ""
+        return
     fi
     
     log_success "Connection created: $CONN_ID"
@@ -83,7 +83,7 @@ create_model() {
     local REMOTE_NAME=$3
     
     if [ -z "$CONN_ID" ]; then
-        return ""
+        return
     fi
     
     log_step "Adding model: $MODEL_NAME → $REMOTE_NAME"
@@ -96,7 +96,7 @@ create_model() {
     
     if [ -z "$MODEL_ID" ]; then
         log_error "Failed to create model $MODEL_NAME"
-        return ""
+        return
     fi
     
     log_success "Model created: $MODEL_ID"
