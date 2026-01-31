@@ -1,13 +1,15 @@
 #!/bin/bash
 
 # Load environment if running standalone
-if [ -z "$VKEY" ]; then
+if [ -z "$VK_ID" ]; then
     [ -f .env ] && export $(grep -v '^#' .env | xargs)
     DB_TYPE=${DB_TYPE:-"mongodb"}
     DB_DSN=${DB_DSN:-"mongodb://root:examplepassword@localhost:27017/llm_proxy?authSource=admin"}
     PORT=${PORT:-8132}
-    VKEY=${VKEY:-"sk-manual-test"}
-    VK_ID=$(./llm-proxy vkey add --db-type "$DB_TYPE" --dsn "$DB_DSN" --name "Manual-Test" --key "$VKEY" | grep -oE "[a-f0-9-]{36}" | tail -1)
+    # Use timestamp to avoid UNIQUE constraint errors
+    TS=$(date +%s)
+    VKEY="sk-manual-openai-$TS"
+    VK_ID=$(./llm-proxy vkey add --db-type "$DB_TYPE" --dsn "$DB_DSN" --name "OpenAI-Test-$TS" --key "$VKEY" | grep -oE "[a-f0-9-]{36}" | tail -1)
     GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 fi
 
@@ -15,7 +17,8 @@ run_test_openai() {
     # Configuration and seeding for OpenAI
     if [[ -n "$OPENAI_API_KEY" && -n "$OPENAI_API_ENDPOINT" ]]; then
         echo "Configuring OpenAI..."
-        OPENAI_ID=$(./llm-proxy connection add --db-type "$DB_TYPE" --dsn "$DB_DSN" --provider "openai" --name "OpenAI-Main" --endpoint "$OPENAI_API_ENDPOINT" --api-key "$OPENAI_API_KEY" | grep -oE "[a-f0-9-]{36}")
+        TS=$(date +%s)
+        OPENAI_ID=$(./llm-proxy connection add --db-type "$DB_TYPE" --dsn "$DB_DSN" --provider "openai" --name "OpenAI-Conn-$TS" --endpoint "$OPENAI_API_ENDPOINT" --api-key "$OPENAI_API_KEY" | grep -oE "[a-f0-9-]{36}" | tail -1)
         M_ID=$(./llm-proxy model add --db-type "$DB_TYPE" --dsn "$DB_DSN" --conn-id "$OPENAI_ID" --name "gpt-4.1" --remote "gpt-4.1" | grep -oE "[a-f0-9-]{36}" | tail -1)
         ./llm-proxy assign --db-type "$DB_TYPE" --dsn "$DB_DSN" --vkey-id "$VK_ID" --model-id "$M_ID" --alias "gpt-4.1" --tps 20 > /dev/null
 
