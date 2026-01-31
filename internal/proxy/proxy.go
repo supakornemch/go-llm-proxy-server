@@ -117,8 +117,6 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		targetPath = strings.Replace(targetPath, modelAlias, pm.RemoteModel, 1)
 	}
 
-	body, _ = json.Marshal(bodyObj)
-
 	// Build raw query. We merge existing endpoint query with request query.
 	rawQuery := c.Request.URL.RawQuery
 
@@ -126,12 +124,20 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 	switch conn.Provider {
 	case "aws":
 		// AWS Bedrock (Claude) often expects /model/MODEL_ID/invoke or similar
-		// If it's a direct endpoint to Bedrock Runtime, we might need to map it.
-		// For OpenAI compatibility, we assume the user might be using a proxy that maps it,
-		// but if we are hitting Bedrock directly, we need to handle the path.
 		if targetPath == "v1/chat/completions" || targetPath == "chat/completions" {
 			targetPath = "model/" + pm.RemoteModel + "/invoke"
 		}
+
+		// Claude on Bedrock does NOT want 'model' in the JSON body
+		delete(bodyObj, "model")
+
+		// Ensure max_tokens is present (Claude required)
+		if _, ok := bodyObj["max_tokens"]; !ok {
+			bodyObj["max_tokens"] = 4096
+		}
+
+		// Some versions of Bedrock Claude expect anthropic_version in body
+		bodyObj["anthropic_version"] = "bedrock-2023-05-31"
 	case "azure":
 		// Map OpenAI-style path to Azure Foundry path if it matches
 		if targetPath == "v1/chat/completions" {
@@ -170,6 +176,8 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		rawQuery = strings.Join(newParams, "&")
 	}
 
+	body, _ = json.Marshal(bodyObj)
+
 	// Final URL Construction
 	finalURL := targetURLStr + "/" + targetPath
 	if rawQuery != "" {
@@ -205,6 +213,9 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		if strings.HasPrefix(conn.APIKey, "ya29.") {
 			req.Header.Set("Authorization", "Bearer "+conn.APIKey)
 		}
+	case "aws":
+		req.Header.Set("anthropic-version", "bedrock-2023-05-31")
+		req.Header.Set("Authorization", "Bearer "+conn.APIKey)
 	default:
 		req.Header.Set("Authorization", "Bearer "+conn.APIKey)
 	}
