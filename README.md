@@ -4,12 +4,17 @@ A lightweight, reliable LLM proxy server written in Go. Manage multiple LLM prov
 
 ## Features
 
-- **Multi-Provider Support**: Connect to OpenAI, Azure OpenAI, and Google Gemini (Native & AI Platform).
+- **Multi-Provider Support**: Connect to OpenAI, Azure OpenAI, and Google Gemini (via OpenAI-compatible endpoint).
 - **Smart Protocol Adaptation**: Automatically handles authentication schemes (Bearer, API Key headers, or Query parameters) based on the provider.
 - **Virtual Keys**: Issue specific keys to clients/projects without exposing master API keys.
 - **Rate Limiting**: Control usage with Requests Per Second (TPS) and Token limits.
 - **Unified Interface**: Supports SQL (SQLite, Postgres, MSSQL) and NoSQL (MongoDB).
 - **Cloud Ready**: Easily deployable to Azure App Service, Heroku, or Docker.
+
+## Documentation
+
+- [English Article (Concept & Design)](docs/ARTICLE_EN.md)
+- [Thai Article (บทความภาษาไทย)](docs/ARTICLE_TH.md)
 
 ## Quick Start (Docker)
 
@@ -19,6 +24,44 @@ A lightweight, reliable LLM proxy server written in Go. Manage multiple LLM prov
    ```bash
    docker compose up --build -d
    ```
+
+## Usage Examples
+
+### 1. LangChain (Python)
+
+The proxy is fully compatible with OpenAI SDKs. You can access **Google Gemini** models using the standard `ChatOpenAI` class!
+
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model="gemini-1.5-flash",       # Use the alias assigned in the proxy
+    api_key="sk-proxy-default-key", # Your Virtual Key
+    base_url="http://localhost:8132/v1"
+)
+
+print(llm.invoke("Hello from Gemini via Proxy!").content)
+```
+
+### 2. cURL
+
+```bash
+curl -X POST http://localhost:8132/v1/chat/completions \
+  -H "Authorization: Bearer sk-proxy-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+### 3. Google Gemini Setup
+
+To add Google Gemini as a provider, use the new OpenAI-compatible endpoint:
+
+- **Provider**: `google`
+- **Endpoint**: `https://generativelanguage.googleapis.com/v1beta/openai` (Note: specific path for OpenAI compatibility)
+- **API Key**: Your Google AI Studio Key
 
 ## Cloud Deployment (e.g., Azure App Service)
 

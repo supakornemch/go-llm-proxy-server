@@ -97,14 +97,12 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 	body, _ = json.Marshal(bodyObj)
 
 	targetURL := strings.TrimSuffix(conn.Endpoint, "/")
-	// Normalize path by stripping /v1/ prefix if present to let DB endpoint control versioning
 	targetPath := strings.TrimPrefix(c.Request.URL.Path, "/")
-	targetPath = strings.TrimPrefix(targetPath, "v1/")
 
 	// Provider-specific routing logic
 	if conn.Provider == "azure" {
-		// Map chat completions path to Azure Foundry native path
-		if targetPath == "chat/completions" {
+		// Map OpenAI-style path to Azure Foundry path if it matches
+		if targetPath == "v1/chat/completions" {
 			targetPath = "models/chat/completions"
 		}
 		// If api-version isn't in endpoint or query, add default

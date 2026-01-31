@@ -33,14 +33,11 @@ var addVkeyCmd = &cobra.Command{
 		}
 
 		vk := &models.VirtualKey{
-			ID:              models.NewID(),
-			Name:            vkName,
-			Key:             vkKey,
-			ConnectionID:    vkConnID,
-			RateLimitTPS:    vkTPS,
-			RateLimitTokens: vkTokens,
-			CreatedAt:       time.Now(),
-			UpdatedAt:       time.Now(),
+			ID:        models.NewID(),
+			Name:      vkName,
+			Key:       vkKey,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
 
 		err = database.SaveVirtualKey(context.Background(), vk)
@@ -48,7 +45,7 @@ var addVkeyCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Virtual key added successfully: %s (Key: %s)\n", vk.Name, vk.Key)
+		fmt.Printf("Virtual key added successfully: %s (Key: %s) [ID: %s]\n", vk.Name, vk.Key, vk.ID)
 		return nil
 	},
 }
@@ -67,9 +64,9 @@ var listVkeyCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("%-36s %-15s %-20s %-10s %-10s\n", "ID", "Name", "Key", "TPS", "Tokens")
+		fmt.Printf("%-36s %-15s %-20s\n", "ID", "Name", "Key")
 		for _, v := range vks {
-			fmt.Printf("%-36s %-15s %-20s %-10.2f %-10d\n", v.ID, v.Name, v.Key, v.RateLimitTPS, v.RateLimitTokens)
+			fmt.Printf("%-36s %-15s %-20s\n", v.ID, v.Name, v.Key)
 		}
 		return nil
 	},
@@ -82,11 +79,7 @@ func init() {
 
 	addVkeyCmd.Flags().StringVar(&vkName, "name", "", "Name of the virtual key")
 	addVkeyCmd.Flags().StringVar(&vkKey, "key", "", "Actual virtual key value for users")
-	addVkeyCmd.Flags().StringVar(&vkConnID, "conn-id", "", "ID of the real connection to map to")
-	addVkeyCmd.Flags().Float64Var(&vkTPS, "tps", 0, "Rate limit: Requests per second")
-	addVkeyCmd.Flags().Int64Var(&vkTokens, "tokens", 0, "Rate limit: Tokens per minute (simulated)")
 
 	addVkeyCmd.MarkFlagRequired("name")
 	addVkeyCmd.MarkFlagRequired("key")
-	addVkeyCmd.MarkFlagRequired("conn-id")
 }

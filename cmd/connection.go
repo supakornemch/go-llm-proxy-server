@@ -34,15 +34,13 @@ var addConnCmd = &cobra.Command{
 		}
 
 		conn := &models.Connection{
-			ID:             models.NewID(),
-			Name:           connName,
-			Provider:       provider,
-			Endpoint:       endpoint,
-			APIKey:         apiKey,
-			Model:          model,
-			DeploymentName: deployment,
-			CreatedAt:      time.Now(),
-			UpdatedAt:      time.Now(),
+			ID:        models.NewID(),
+			Name:      connName,
+			Provider:  provider,
+			Endpoint:  endpoint,
+			APIKey:    apiKey,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
 
 		err = database.SaveConnection(context.Background(), conn)
@@ -69,9 +67,9 @@ var listConnCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("%-36s %-15s %-10s %-20s\n", "ID", "Name", "Provider", "Model")
+		fmt.Printf("%-36s %-15s %-10s\n", "ID", "Name", "Provider")
 		for _, c := range conns {
-			fmt.Printf("%-36s %-15s %-10s %-20s\n", c.ID, c.Name, c.Provider, c.Model)
+			fmt.Printf("%-36s %-15s %-10s\n", c.ID, c.Name, c.Provider)
 		}
 		return nil
 	},
