@@ -12,7 +12,6 @@ import (
 	"github.com/supakornemchananon/go-llm-proxy-server/internal/db"
 	"github.com/supakornemchananon/go-llm-proxy-server/internal/models"
 	"github.com/supakornemchananon/go-llm-proxy-server/internal/ratelimit"
-	"github.com/supakornemchananon/go-llm-proxy-server/pkg/cryptoutil"
 )
 
 type Proxy struct {
@@ -34,7 +33,6 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		return
 	}
 	rawKey := strings.TrimPrefix(authHeader, "Bearer ")
-	keyHash := cryptoutil.HashKey(rawKey)
 
 	// Check for Master Key (if configured in environment)
 	masterKey := os.Getenv("MASTER_KEY")
@@ -48,10 +46,10 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		vk = &models.VirtualKey{
 			ID:   "master-id",
 			Name: "Master Key",
-			Key:  keyHash,
+			Key:  rawKey,
 		}
 	} else {
-		vk, err = p.db.GetVirtualKey(c.Request.Context(), keyHash)
+		vk, err = p.db.GetVirtualKey(c.Request.Context(), rawKey)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid virtual key"})
 			return
