@@ -79,6 +79,9 @@ func init() {
 
 	addVkeyCmd.Flags().StringVar(&vkName, "name", "", "Name of the virtual key")
 	addVkeyCmd.Flags().StringVar(&vkKey, "key", "", "Actual virtual key value for users")
+	// Note: --conn-id is not used directly in 'vkey add' anymore.
+	// Use './llm-proxy assign' to link a Virtual Key to a Model/Connection.
+	addVkeyCmd.Flags().StringVar(&vkConnID, "conn-id", "", "Connection ID (deprecated in vkey add, use assign instead)")
 
 	addVkeyCmd.MarkFlagRequired("name")
 	addVkeyCmd.MarkFlagRequired("key")
