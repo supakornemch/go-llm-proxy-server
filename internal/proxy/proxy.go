@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/supakornemchananon/go-llm-proxy-server/internal/db"
+	"github.com/supakornemchananon/go-llm-proxy-server/internal/models"
 	"github.com/supakornemchananon/go-llm-proxy-server/internal/ratelimit"
+	"github.com/supakornemchananon/go-llm-proxy-server/pkg/cryptoutil"
 )
 
 type Proxy struct {
@@ -30,12 +33,29 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid authorization header"})
 		return
 	}
-	vkey := strings.TrimPrefix(authHeader, "Bearer ")
+	rawKey := strings.TrimPrefix(authHeader, "Bearer ")
+	keyHash := cryptoutil.HashKey(rawKey)
 
-	vk, err := p.db.GetVirtualKey(c.Request.Context(), vkey)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid virtual key"})
-		return
+	// Check for Master Key (if configured in environment)
+	masterKey := os.Getenv("MASTER_KEY")
+	isMaster := masterKey != "" && rawKey == masterKey
+
+	var vk *models.VirtualKey
+	var err error
+
+	if isMaster {
+		// Create a synthetic Virtual Key for master access
+		vk = &models.VirtualKey{
+			ID:   "master-id",
+			Name: "Master Key",
+			Key:  keyHash,
+		}
+	} else {
+		vk, err = p.db.GetVirtualKey(c.Request.Context(), keyHash)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid virtual key"})
+			return
+		}
 	}
 
 	// Read body to identify requested model alias
@@ -49,15 +69,15 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 	json.Unmarshal(body, &bodyObj)
 	modelAlias, _ := bodyObj["model"].(string)
 
-	// Fallback: Try to extract model from URL if not in body (common in Gemini SDKs)
-	// Example path: /v1/models/gemini-1.5-flash:generateContent
-	// Example Vertex path: /v1/projects/.../locations/.../publishers/google/models/gemini-1.5-flash:streamGenerateContent
+	// Fallback: Try to extract model from URL if not in body (common in Gemini/Bedrock SDKs)
+	// Example Gemini: /v1/models/gemini-1.5-flash:generateContent
+	// Example Bedrock: /model/anthropic.claude-3-sonnet-20240229-v1:0/invoke
 	if modelAlias == "" {
 		pathParts := strings.Split(c.Request.URL.Path, "/")
 		for i, part := range pathParts {
-			if part == "models" && i+1 < len(pathParts) {
+			// Matches "models" (Gemini) or "model" (Bedrock)
+			if (part == "models" || part == "model") && i+1 < len(pathParts) {
 				modelAlias = strings.Split(pathParts[i+1], ":")[0]
-				// Check if it's the specific part we want (avoiding mid-path matching if possible)
 				if modelAlias != "" {
 					break
 				}
@@ -70,18 +90,30 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 		return
 	}
 
-	// Get assignment for this virtual key and model alias
-	vka, err := p.db.GetVirtualKeyAssignment(c.Request.Context(), vk.ID, modelAlias)
-	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Virtual key not authorized for model: " + modelAlias})
-		return
-	}
+	var pm *models.ProviderModel
+	var vka *models.VirtualKeyAssignment
 
-	// Get the actual provider model
-	pm, err := p.db.GetProviderModel(c.Request.Context(), vka.ProviderModelID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Target model not found"})
-		return
+	if isMaster {
+		// Master key bypasses assignments. Try to find model directly by name/alias.
+		pm, err = p.db.GetProviderModelByName(c.Request.Context(), modelAlias)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Model not found: " + modelAlias})
+			return
+		}
+	} else {
+		// Get assignment for this virtual key and model alias
+		vka, err = p.db.GetVirtualKeyAssignment(c.Request.Context(), vk.ID, modelAlias)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Virtual key not authorized for model: " + modelAlias})
+			return
+		}
+
+		// Get the actual provider model
+		pm, err = p.db.GetProviderModel(c.Request.Context(), vka.ProviderModelID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Target model not found"})
+			return
+		}
 	}
 
 	// Get credentials
@@ -92,7 +124,14 @@ func (p *Proxy) HandleProxy(c *gin.Context) {
 	}
 
 	// Rate limiting (per key per model)
-	limiter := p.ratelimitManager.GetLimiter(vk.Key+":"+modelAlias, vka.RateLimitTPS, vka.RateLimitTokens)
+	var tps float64 = 100.0 // Default for master
+	var tokens int64 = 1000000
+	if vka != nil {
+		tps = vka.RateLimitTPS
+		tokens = vka.RateLimitTokens
+	}
+
+	limiter := p.ratelimitManager.GetLimiter(vk.Key+":"+modelAlias, tps, tokens)
 	if !limiter.AllowTPS() {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "TPS limit exceeded"})
 		return

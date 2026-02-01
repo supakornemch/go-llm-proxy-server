@@ -24,6 +24,7 @@ type DB interface {
 
 	SaveProviderModel(ctx context.Context, pm *models.ProviderModel) error
 	GetProviderModel(ctx context.Context, id string) (*models.ProviderModel, error)
+	GetProviderModelByName(ctx context.Context, name string) (*models.ProviderModel, error)
 	ListProviderModels(ctx context.Context, connectionID string) ([]models.ProviderModel, error)
 	DeleteProviderModel(ctx context.Context, id string) error
 
@@ -92,6 +93,12 @@ func (s *SQLDB) SaveProviderModel(ctx context.Context, pm *models.ProviderModel)
 func (s *SQLDB) GetProviderModel(ctx context.Context, id string) (*models.ProviderModel, error) {
 	var pm models.ProviderModel
 	err := s.db.WithContext(ctx).First(&pm, "id = ?", id).Error
+	return &pm, err
+}
+
+func (s *SQLDB) GetProviderModelByName(ctx context.Context, name string) (*models.ProviderModel, error) {
+	var pm models.ProviderModel
+	err := s.db.WithContext(ctx).First(&pm, "name = ?", name).Error
 	return &pm, err
 }
 
@@ -246,6 +253,13 @@ func (m *MongoDB) GetProviderModel(ctx context.Context, id string) (*models.Prov
 	coll := m.db.Collection("provider_models")
 	var pm models.ProviderModel
 	err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(&pm)
+	return &pm, err
+}
+
+func (m *MongoDB) GetProviderModelByName(ctx context.Context, name string) (*models.ProviderModel, error) {
+	coll := m.db.Collection("provider_models")
+	var pm models.ProviderModel
+	err := coll.FindOne(ctx, bson.M{"name": name}).Decode(&pm)
 	return &pm, err
 }
 

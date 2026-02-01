@@ -1,116 +1,84 @@
-# Go LLM Proxy Server
+# 🚀 Go LLM Proxy Server
 
-A lightweight, reliable LLM proxy server written in Go. Manage multiple LLM providers behind a unified endpoint with virtual keys and rate limiting.
+[![Go Report Card](https://goreportcard.com/badge/github.com/supakornemchananon/go-llm-proxy-server)](https://goreportcard.com/report/github.com/supakornemchananon/go-llm-proxy-server)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Features
+A high-performance, enterprise-ready LLM proxy server written in Go. Unified access to OpenAI, Azure OpenAI, Google Gemini, and AWS Bedrock with advanced quota management and virtual key security.
 
-- **Multi-Provider Support**: Connect to OpenAI, Azure OpenAI, and Google Gemini (via OpenAI-compatible endpoint).
-- **Smart Protocol Adaptation**: Automatically handles authentication schemes (Bearer, API Key headers, or Query parameters) based on the provider.
-- **Virtual Keys**: Issue specific keys to clients/projects without exposing master API keys.
-- **Rate Limiting**: Control usage with Requests Per Second (TPS) and Token limits.
-- **Unified Interface**: Supports SQL (SQLite, Postgres, MSSQL) and NoSQL (MongoDB).
-- **Cloud Ready**: Easily deployable to Azure App Service, Heroku, or Docker.
+---
 
-## Documentation
+## 🌟 Key Features
 
-- [English Article (Concept & Design)](docs/ARTICLE_EN.md)
-- [Thai Article (บทความภาษาไทย)](docs/ARTICLE_TH.md)
+- **Unified API**: One endpoint to rule them all. Use OpenAI-compatible SDKs for any provider.
+- **Provider Adapters**: 
+  - **OpenAI**: Native support.
+  - **Azure OpenAI**: Automatic path and header mapping.
+  - **Google Gemini**: Support for AI Studio OpenAI-compatible endpoints & native SDKs.
+  - **AWS Bedrock**: Claude 3/3.5 support with payload surgery.
+- **Security First**: 
+  - **Virtual Keys**: Never share your master API keys. Issue hashed virtual keys to teams.
+  - **Master Key Bypass**: Admin access via `MASTER_KEY` environment variable.
+- **Enterprise Controls**:
+  - **Granular Rate Limiting**: Per-key, per-model Request-Per-Second (TPS) and Token quotas.
+  - **Flexible Storage**: Supports SQLite (local), PostgreSQL (scalable), and MongoDB (NoSQL).
+- **Modern Architecture**: Stateless design, Docker-ready, and CGO-optimized for SQLite performance.
 
-## Quick Start (Docker)
+## 🏗️ Architecture
 
-1. Clone the repository.
-2. Create `.env` from `.env.example`.
-3. Run with Docker Compose:
-   ```bash
-   docker compose up --build -d
-   ```
-
-## Usage Examples
-
-### 1. LangChain (Python)
-
-The proxy is fully compatible with OpenAI SDKs. You can access **Google Gemini** models using the standard `ChatOpenAI` class!
-
-```python
-from langchain_openai import ChatOpenAI
-
-llm = ChatOpenAI(
-    model="gemini-1.5-flash",       # Use the alias assigned in the proxy
-    api_key="sk-proxy-default-key", # Your Virtual Key
-    base_url="http://localhost:8132/v1"
-)
-
-print(llm.invoke("Hello from Gemini via Proxy!").content)
+```mermaid
+graph TD
+    User([User/App]) -- Web/SDK/cURL --> Proxy[Go LLM Proxy]
+    Proxy -- Auth & Quota --> DB[(Database: SQL/NoSQL)]
+    Proxy -- Route & Transform --> Providers{LLM Providers}
+    Providers --> OpenAI[OpenAI]
+    Providers --> Azure[Azure OpenAI]
+    Providers --> Gemini[Google Gemini]
+    Providers --> Bedrock[AWS Bedrock]
 ```
 
-### 2. Google GenAI SDK (Native & Thinking Config)
+## 🚀 Quick Start
 
-The proxy also supports the native Google GenAI SDK and advanced features like **Thinking Config** (Gemini 2.0).
-
-```python
-from google import genai
-from google.genai import types
-
-client = genai.Client(
-    api_key="sk-proxy-default-key", # Your Virtual Key
-    request_options={"base_url": "http://localhost:8132"}
-)
-
-# You can use advanced Gemini features through the proxy passthrough
-config = types.GenerateContentConfig(
-    thinking_config=types.ThinkingConfig(thinking_level="HIGH"),
-)
-
-response = client.models.generate_content(
-    model="gemini-2.0-flash-thinking-preview", 
-    contents="Explain quantum computing.",
-    config=config
-)
-print(response.text)
-```
-
-### 3. cURL
-
+### 1. Run with Docker Compose
 ```bash
-curl -X POST http://localhost:8132/v1/chat/completions \
-  -H "Authorization: Bearer sk-proxy-default-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
+docker compose up --build -d
 ```
 
-### 3. Google Gemini Setup
-
-To add Google Gemini as a provider, use the new OpenAI-compatible endpoint:
-
-- **Provider**: `google`
-- **Endpoint**: `https://generativelanguage.googleapis.com/v1beta/openai` (Note: specific path for OpenAI compatibility)
-- **API Key**: Your Google AI Studio Key
-
-## Cloud Deployment (e.g., Azure App Service)
-
-To deploy without manually running CLI commands, the server supports **Auto-Seeding**. Set the following Environment Variables in your App Service configuration:
-- `DB_TYPE`: `sqlite` (or `postgres`)
-- `MASTER_CONN_NAME`: `Production-LLM`
-- `MASTER_CONN_PROVIDER`: `openai`
-- `MASTER_CONN_ENDPOINT`: `https://api.openai.com`
-- `MASTER_CONN_API_KEY`: `your-real-api-key`
-- `MASTER_CONN_MODEL`: `gpt-4o`
-- `MASTER_VKEY_NAME`: `Default-Access`
-- `MASTER_VKEY_KEY`: `your-proxy-access-key`
-
-The server will automatically register these in the database on its first run if they don't exist.
-
-## CLI Usage
-
-Manage connections manually:
+### 2. Manual Setup
 ```bash
-./llm-proxy connection add --name "Alpha" --provider "openai" --endpoint "..." --api-key "..."
-./llm-proxy vkey add --name "TestKey" --conn-id "UUID" --key "sk-proxy-123"
+go build -o llm-proxy
+export DATABASE_URL="sqlite.db"
+export DB_TYPE="sqlite"
+export MASTER_KEY="your-admin-bypass-key"
+./llm-proxy serve
 ```
 
-## License
+## 🛠️ CLI Guide
 
-MIT
+Managing your proxy is simple with the built-in CLI.
+
+### Add a Connection
+```bash
+./llm-proxy connection add --name "prod-openai" --provider "openai" --endpoint "https://api.openai.com/v1" --api-key "sk-..."
+```
+
+### Add a Virtual Key (New!)
+You can now auto-assign models during key creation:
+
+**By Connection (Access everything in that provider):**
+```bash
+./llm-proxy vkey add --name "Dev-Team-1" --key "secret-dev-key" --conn-id "<CONN_ID>"
+```
+
+**By Model (Restrict to a specific model):**
+```bash
+./llm-proxy vkey add --name "Chatbot-App" --key "sk-chat-key" --model-id "<MODEL_ID>"
+```
+
+## 📚 Documentation
+
+- [**Thai Guide (คู่มือภาษาไทย)**](docs/GUIDE_TH.md) - Full setup guide in Thai.
+- [**Deployment Guide**](docs/DEPLOYMENT.md) - Cloud and Docker details.
+- [**Sample Code**](docs/SAMPLES.md) - Python/JS usage examples.
+
+## 📄 License
+Released under the MIT License. Built with ❤️ for the LLM community.
