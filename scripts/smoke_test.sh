@@ -141,7 +141,7 @@ echo -e "${YELLOW}📡 Running connectivity tests...${NC}"
 TEST_FAILED=0
 # Note: Using standard OpenAI JSON format for ALL providers now!
 PAYLOAD='{
-  "messages": [{"role": "user", "content": "Please say hello to me!"}],
+  "messages": [{"role": "user", "content": "Say thai 3 words"}],
   "temperature": 0.7
 }'
 
@@ -162,7 +162,7 @@ run_test() {
                     "role": "user",
                     "parts": [
                         {
-                            "text": "Please say hello to me!"
+                            "text": "Say thai 3 words"
                         }
                     ]
                 }
@@ -172,7 +172,8 @@ run_test() {
                 "maxOutputTokens": 65535,
                 "topP": 0.95,
                 "thinkingConfig": {
-                    "thinkingLevel": "LOW"
+                    "includeThoughts": false,
+                    "thinkingLevel": "minimal"
                 }
             }
         }'
